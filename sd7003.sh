@@ -24,7 +24,7 @@ run1GPU1node (){
     thread_per_node=$gpu_count
     thread_count=$(($thread_per_node*$node_count))
 
-    label="ivp${polynomial_order}GPU1"
+    label="sd7003${polynomial_order}GPU1"
 
     bsub << EOF
 #BSUB -J ${label}
@@ -37,16 +37,21 @@ run1GPU1node (){
 #BSUB -data tag:sdready
 
 rm -rf ${label} 2> /dev/null
-cp -r /p${polynomial_order} ${label}
+cp -r sd7003/ ${label}
 cd ${label}
 
-mesh_file=\`ls *.msh\`
+gunzip sd7003.msh.gz 
+echo -n "Importing mesh... "
+pyfr import sd7003.msh sd7003.pyfrm
+echo done.
+echo -n "Partitoning mesh... "
+pyfr partition ${thread_count} sd7003.pyfrm .
+echo done.
 
-pyfr import \${mesh_file} euler_vortex_2d.pyfrm
-
+echo -n "Running... "
 pyfr run --backend cuda \\
-    euler_vortex_2d.pyfrm \\
-    euler_vortex_2d.ini
+    sd7003.pyfrm \\
+    sd7003.ini
 EOF
 }
 
@@ -76,10 +81,10 @@ cd ${label}
 gunzip sd7003.msh.gz 
 echo -n "Importing mesh... "
 pyfr import sd7003.msh sd7003.pyfrm
-echo done
+echo done.
 echo -n "Partitoning mesh... "
 pyfr partition ${thread_count} sd7003.pyfrm .
-echo done
+echo done.
 
 export OMP_NUM_THREADS=0
 export OMP_PROC_BIND=true
@@ -96,13 +101,15 @@ mpirun \\
     pyfr run --backend cuda \\
     sd7003.pyfrm \\
     sd7003.ini
+
 EOF
 }
 
-bdata tags clean sdready -dmd panther
-sleep 1
-upload
-for n in 1 2 4 8 16;
+# bdata tags clean sdready -dmd panther
+# sleep 1
+# upload
+run1GPU1node
+for n in 1 8;
 do
-    run4GPU $n $p
+    run4GPU $n
 done

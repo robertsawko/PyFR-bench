@@ -1,22 +1,6 @@
 #!/bin/bash
 # Simulation of an SD7003 airfoil with full Navier Stokes
 
-upload (){
-    full_path=`readlink -f sd7003`
-
-    bsub << EOF
-#BSUB -J sd7003-up
-#BSUB -oo sd7003-up.out
-#BSUB -data ${full_path}
-
-bstage in \\
-    -src $full_path \\
-    -dst sd7003
-touch sdready
-bstage out -src sdready -tag sdready
-EOF
-}
-
 run1GPU1node (){
     polynomial_order=${1}
     node_count=1
@@ -29,12 +13,12 @@ run1GPU1node (){
     bsub << EOF
 #BSUB -J ${label}
 #BSUB -oo ${label}.out
-#BSUB -q panther
+#BSUB -q excl
 #BSUB -W 24:00
+#BSUB -R "select[ngpus=4] rusage[ngpus_shared=20]"
 #BSUB -R "span[ptile=${thread_per_node}]"
 #BSUB -n ${thread_count}
 #BSUB -x
-#BSUB -data tag:sdready
 
 rm -rf ${label} 2> /dev/null
 cp -r sd7003/ ${label}
@@ -49,7 +33,7 @@ pyfr partition ${thread_count} sd7003.pyfrm .
 echo done.
 
 echo -n "Running... "
-pyfr run --backend cuda \\
+perf stat pyfr run --backend cuda \\
     sd7003.pyfrm \\
     sd7003.ini
 EOF
@@ -67,16 +51,20 @@ run4GPU (){
     bsub << EOF
 #BSUB -J ${label}
 #BSUB -oo ${label}.out
-#BSUB -q panther
-#BSUB -W 24:00
-#BSUB -R "span[ptile=${thread_per_node}] affinity[core(1)]"
+#BSUB -q excl
+#BSUB -W 2:00
+#BSUB -R "span[ptile=${thread_per_node}]"
+#BSUB -R "select[ngpus=4] rusage[ngpus_shared=20]"
 #BSUB -n ${thread_count}
 #BSUB -x
-#BSUB -data tag:sdready
+
+ulimit -s 10240
 
 rm -rf ${label} 2> /dev/null
 cp -r sd7003/ ${label}
 cd ${label}
+
+export PATH=$PATH
 
 gunzip sd7003.msh.gz 
 echo -n "Importing mesh... "
@@ -86,18 +74,11 @@ echo -n "Partitoning mesh... "
 pyfr partition ${thread_count} sd7003.pyfrm .
 echo done.
 
-export OMP_NUM_THREADS=0
-export OMP_PROC_BIND=true
-export OMP_PLACES=cores
-
-export HYDRA_TOPO_DEBUG=1
-export MV2_SHOW_ENV_INFO=2
-export MV2_SHOW_CPU_BINDING=1
-
-export MV2_CPU_BINDING_POLICY=scatter
-
-echo -n "Running... "
-mpirun \\
+echo "Running... "
+perf stat mpirun \\
+    -report-bindings -display-map -display-allocation \\
+    -np $thread_count \\
+    -bind-to hwthread -map-by ppr:2:socket -rank-by socket \\
     pyfr run --backend cuda \\
     sd7003.pyfrm \\
     sd7003.ini
@@ -105,11 +86,8 @@ mpirun \\
 EOF
 }
 
-# bdata tags clean sdready -dmd panther
-# sleep 1
-# upload
-run1GPU1node
-for n in 1 8;
+# run1GPU1node
+for n in 1 2 4 8 16 32;
 do
     run4GPU $n
 done

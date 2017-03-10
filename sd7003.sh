@@ -30,46 +30,8 @@ run1GPU1node (){
 #BSUB -J ${label}
 #BSUB -oo ${label}.out
 #BSUB -q panther
-#BSUB -W 24:00
+#BSUB -W 8:00
 #BSUB -R "span[ptile=${thread_per_node}]"
-#BSUB -n ${thread_count}
-#BSUB -x
-#BSUB -data tag:sdready
-
-rm -rf ${label} 2> /dev/null
-cp -r sd7003/ ${label}
-cd ${label}
-
-gunzip sd7003.msh.gz 
-echo -n "Importing mesh... "
-pyfr import sd7003.msh sd7003.pyfrm
-echo done.
-echo -n "Partitoning mesh... "
-pyfr partition ${thread_count} sd7003.pyfrm .
-echo done.
-
-echo -n "Running... "
-pyfr run --backend cuda \\
-    sd7003.pyfrm \\
-    sd7003.ini
-EOF
-}
-
-run4GPU (){
-    node_count=${1}
-    polynomial_order=${2}
-    gpu_count=4
-    thread_per_node=$gpu_count
-    thread_count=$(($thread_per_node*$node_count))
-
-    label="sd7003_n${node_count}"
-
-    bsub << EOF
-#BSUB -J ${label}
-#BSUB -oo ${label}.out
-#BSUB -q panther
-#BSUB -W 24:00
-#BSUB -R "span[ptile=${thread_per_node}] affinity[core(1)]"
 #BSUB -n ${thread_count}
 #BSUB -x
 #BSUB -data tag:sdready
@@ -90,26 +52,65 @@ export OMP_NUM_THREADS=0
 export OMP_PROC_BIND=true
 export OMP_PLACES=cores
 
-export HYDRA_TOPO_DEBUG=1
-export MV2_SHOW_ENV_INFO=2
-export MV2_SHOW_CPU_BINDING=1
-
-export MV2_CPU_BINDING_POLICY=scatter
-
 echo -n "Running... "
-mpirun \\
-    pyfr run --backend cuda \\
+pyfr run --backend cuda \\
+    sd7003.pyfrm \\
+    sd7003.ini
+EOF
+}
+
+run4GPU (){
+    node_count=${1}
+    polynomial_order=${2}
+    gpu_count=4
+    thread_per_node=$gpu_count
+    thread_count=$(($thread_per_node*$node_count))
+
+    label="sd7003_n${node_count}"
+
+    bsub << EOF
+#BSUB -J ${label}
+#BSUB -oo ${label}.out
+#BSUB -q PantherBenchmark
+#BSUB -W 8:00
+#BSUB -R "span[ptile=${thread_per_node}]"
+#BSUB -n ${thread_count}
+#BSUB -x
+#BSUB -data tag:sdready
+
+ulimit -s 10240
+
+rm -rf ${label} 2> /dev/null
+cp -r sd7003/ ${label}
+cd ${label}
+
+gunzip sd7003.msh.gz 
+echo -n "Importing mesh... "
+pyfr import sd7003.msh sd7003.pyfrm
+echo done.
+echo -n "Partitoning mesh... "
+pyfr partition ${thread_count} sd7003.pyfrm .
+echo done.
+
+export OMP_NUM_THREADS=0
+# export OMP_PROC_BIND=true
+# export OMP_PLACES=cores
+
+echo "Running... "
+mpirun -report-bindings -display-map -display-allocation \\
+    -bind-to core -map-by ppr:2:socket -rank-by core \\
+    pyfr --verbose run --backend cuda \\
     sd7003.pyfrm \\
     sd7003.ini
 
 EOF
 }
 
-# bdata tags clean sdready -dmd panther
-# sleep 1
-# upload
+bdata tags clean sdready -dmd panther
+sleep 1
+upload
 run1GPU1node
-for n in 1 8;
+for n in 1 2 4 8 16 28 29 30;
 do
     run4GPU $n
 done

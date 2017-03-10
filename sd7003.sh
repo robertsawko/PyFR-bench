@@ -1,5 +1,10 @@
 #!/bin/bash
 # Simulation of an SD7003 airfoil with full Navier Stokes
+# The submission script is prepared for Power8 and 4x GPUs
+
+# Note: LSF Data Mover directives are specific to Panther cluster at Daresbury.
+#
+
 
 upload (){
     full_path=`readlink -f sd7003`

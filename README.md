@@ -4,7 +4,9 @@ The objective here is to develop a benchmark for multi node multi-gpu runs for
 PyFR [1].
 
 The benchmarks are based on the supplementary material of [2]. Minor changes to
-the files had to be introduced to keep up with the PyFR version.
+the files had to be introduced to keep up with the PyFR version. The target
+architecture is Power8 with 4 GPUs each. There are some specific LSF Data Mover
+commands due to the adoption of DMD at Daresbury.
 
 ## Isentropic vortex
 

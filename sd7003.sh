@@ -76,7 +76,7 @@ run4GPU (){
     bsub << EOF
 #BSUB -J ${label}
 #BSUB -oo ${label}.out
-#BSUB -q PantherBenchmark
+#BSUB -q PantherBenchmarking
 #BSUB -W 8:00
 #BSUB -R "span[ptile=${thread_per_node}]"
 #BSUB -n ${thread_count}
@@ -98,8 +98,6 @@ pyfr partition ${thread_count} sd7003.pyfrm .
 echo done.
 
 export OMP_NUM_THREADS=0
-# export OMP_PROC_BIND=true
-# export OMP_PLACES=cores
 
 echo "Running... "
 mpirun -report-bindings -display-map -display-allocation \\
